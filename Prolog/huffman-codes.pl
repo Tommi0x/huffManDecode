@@ -137,7 +137,3 @@ print_tree(tree(Left, Right, Weight), Indent) :-
     print_tree(Left, NewIndent),
     format('~*cRight:~n', [Indent, 32]),
     print_tree(Right, NewIndent).
-
-
-%%%%%% TEST %%%%%%
-% Test case 1
