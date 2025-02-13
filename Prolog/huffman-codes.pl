@@ -47,7 +47,10 @@ weight(tree(_, _, W), W).
 hucodec_generate_symbol_bits_table(HuffmanTree, Table) :-
     traverse_tree(HuffmanTree, [], Table).
 
-traverse_tree(leaf(Symbol, _), Acc, [sb(Symbol, Acc)]).
+traverse_tree(leaf(Symbol, _), Acc, [sb(Symbol, Bits)]) :-
+    ( Acc = [] -> Bits = [0]
+    ; Bits = Acc
+    ).
 traverse_tree(tree(Left, Right, _), Acc, Table) :-
     append(Acc, [0], AccLeft),
     traverse_tree(Left, AccLeft, TableLeft),
@@ -73,7 +76,13 @@ encode_message([Symbol|Rest], Table, Bits) :-
 
 % hucodec_decode(+Bits, +HuffmanTree, -Message)
 hucodec_decode(Bits, HuffmanTree, Message) :-
+    HuffmanTree \= leaf(_, _),
     decode_bits(Bits, HuffmanTree, HuffmanTree, Message).
+
+hucodec_decode(Bits, leaf(Symbol, _), Message) :-
+    length(Bits, N),                % Determine the number of bits
+    length(Message, N),             % Ensure Message has the same length
+    maplist(=(Symbol), Message).     % Assign the Symbol to each position in Message
 
 decode_bits([], _HuffmanTree, _Current, []).
 decode_bits(Bits, HuffmanTree, Current, [Symbol|RestMessage]) :-
