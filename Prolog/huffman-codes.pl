@@ -48,9 +48,12 @@ hucodec_generate_symbol_bits_table(HuffmanTree, Table) :-
     traverse_tree(HuffmanTree, [], Table).
 
 traverse_tree(leaf(Symbol, _), Acc, [sb(Symbol, Bits)]) :-
-    ( Acc = [] -> Bits = [0]
-    ; Bits = Acc
-    ).
+    Acc = [],
+    Bits = [0].
+traverse_tree(leaf(Symbol, _), Acc, [sb(Symbol, Bits)]) :-
+    Acc \= [],
+    Bits = Acc.
+
 traverse_tree(tree(Left, Right, _), Acc, Table) :-
     append(Acc, [0], AccLeft),
     traverse_tree(Left, AccLeft, TableLeft),
@@ -91,12 +94,12 @@ decode_bits(Bits, HuffmanTree, Current, [Symbol|RestMessage]) :-
 
 % traverse_for_symbol(+Bits, +CurrentNode, -Symbol, -RemainingBits)
 traverse_for_symbol(Bits, leaf(Symbol, _), Symbol, Bits) :- !.
-traverse_for_symbol([Bit|RestBits], tree(Left, Right, _), Symbol, RemainingBits) :-
-    ( Bit =:= 0 ->
-        traverse_for_symbol(RestBits, Left, Symbol, RemainingBits)
-    ; Bit =:= 1 ->
-        traverse_for_symbol(RestBits, Right, Symbol, RemainingBits)
-    ).
+traverse_for_symbol([Bit|RestBits], tree(Left, _, _), Symbol, RemainingBits) :-
+    Bit =:= 0,
+    traverse_for_symbol(RestBits, Left, Symbol, RemainingBits).
+traverse_for_symbol([Bit|RestBits], tree(_, Right, _), Symbol, RemainingBits) :-
+    Bit =:= 1,
+    traverse_for_symbol(RestBits, Right, Symbol, RemainingBits).
 
 %%%%% CODIFICA DI UN FILE %%%%%
 
@@ -118,9 +121,13 @@ read_stream_to_codes(Stream, Codes) :-
 
 read_stream_to_codes(Stream, Acc, Codes) :-
     get_code(Stream, Code),
-    ( Code = -1 -> reverse(Acc, Codes)
-    ; read_stream_to_codes(Stream, [Code|Acc], Codes)
-    ).
+    process_code(Code, Stream, Acc, Codes).
+
+process_code(-1, _, Acc, Codes) :-
+    reverse(Acc, Codes).
+process_code(Code, Stream, Acc, Codes) :-
+    Code \= -1,
+    read_stream_to_codes(Stream, [Code|Acc], Codes).
 
 %%%%% STAMPA DELL'ALBERO %%%%%
 
