@@ -19,7 +19,7 @@ hucodec_generate_huffman_tree(SymbolsAndWeights, HuffmanTree) :-
     maplist(convert_sw_to_leaf, SymbolsAndWeights, Leaves),
     build_huffman_tree(Leaves, HuffmanTree).
 
-%funzione di supporto per la generazione dell'albero di huffman
+% funzione di supporto per la generazione dell'albero di huffman
 build_huffman_tree([Tree], Tree).
 build_huffman_tree(Nodes, Tree) :-
     sort_nodes_by_weight(Nodes, Sorted),
@@ -31,13 +31,13 @@ build_huffman_tree(Nodes, Tree) :-
     append(Rest, [NewNode], NewNodes),
     build_huffman_tree(NewNodes, Tree).
 
-%ordinamento dei nodi in base al peso
+% ordinamento dei nodi in base al peso
 sort_nodes_by_weight(Nodes, SortedNodes) :-
     map_list_to_pairs(weight, Nodes, Pairs),
     keysort(Pairs, SortedPairs),
     pairs_values(SortedPairs, SortedNodes).
 
-%estrazione del peso di un nodo/foglia
+% estrazione del peso di un nodo/foglia
 weight(leaf(_, W), W).
 weight(tree(_, _, W), W).
 
@@ -49,7 +49,7 @@ weight(tree(_, _, W), W).
 hucodec_generate_symbol_bits_table(HuffmanTree, Table) :-
     traverse_tree(HuffmanTree, [], Table).
 
-%attraversamento dell'albero e generazione della tabella
+% attraversamento dell'albero e generazione della tabella
 traverse_tree(leaf(Symbol, _), Acc, [sb(Symbol, Bits)]) :-
     Acc = [],
     Bits = [0].
@@ -72,7 +72,7 @@ hucodec_encode(Message, HuffmanTree, Bits) :-
     hucodec_generate_symbol_bits_table(HuffmanTree, Table),
     encode_message(Message, Table, Bits).
 
-%codifica del messaggio
+% codifica del messaggio
 encode_message([], _Table, []).
 encode_message([Symbol|Rest], Table, Bits) :-
     member(sb(Symbol, Code), Table),
@@ -92,13 +92,13 @@ hucodec_decode(Bits, leaf(Symbol, _), Message) :-
     length(Message, N),             
     maplist(=(Symbol), Message).     
 
-%decodifica dei bit
+% decodifica dei bit
 decode_bits([], _HuffmanTree, _Current, []).
 decode_bits(Bits, HuffmanTree, Current, [Symbol|RestMessage]) :-
     traverse_for_symbol(Bits, Current, Symbol, RemainingBits),
     decode_bits(RemainingBits, HuffmanTree, HuffmanTree, RestMessage).
 
-%attraversamento dell'albero per trovare il simbolo corrispondente
+% attraversamento dell'albero per trovare il simbolo corrispondente
 traverse_for_symbol(Bits, leaf(Symbol, _), Symbol, Bits) :- !.
 traverse_for_symbol([Bit|RestBits], tree(Left, _, _), Symbol, RemainingBits) :-
     Bit =:= 0,
@@ -117,21 +117,21 @@ hucodec_encode_file(Filename, HuffmanTree, Bits) :-
     string_chars(String, Message),
     hucodec_encode(Message, HuffmanTree, Bits).
 
-%lettura del file
+% lettura del file
 read_file_to_string(Filename, String) :-
     open(Filename, read, Stream),
     read_stream_to_codes(Stream, Codes),
     close(Stream),
     string_codes(String, Codes).
 
-%lettura dello stream
+% lettura dello stream
 read_stream_to_codes(Stream, Codes) :-
     read_stream_to_codes(Stream, [], Codes).
 read_stream_to_codes(Stream, Acc, Codes) :-
     get_code(Stream, Code),
     process_code(Code, Stream, Acc, Codes).
 
-%formattazione dei codici
+% formattazione dei codici
 process_code(-1, _, Acc, Codes) :-
     reverse(Acc, Codes).
 process_code(Code, Stream, Acc, Codes) :-
@@ -145,7 +145,7 @@ process_code(Code, Stream, Acc, Codes) :-
 hucodec_print_huffman_tree(Tree) :-
     print_tree(Tree, 0).
 
-%formattazione per la stampa dell'albero
+% formattazione per la stampa dell'albero
 print_tree(leaf(Symbol, Weight), Indent) :-
     format('~*cLeaf: ~w (Weight: ~w)~n', [Indent, 32, Symbol, Weight]).
 print_tree(tree(Left, Right, Weight), Indent) :-
