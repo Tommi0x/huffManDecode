@@ -1,117 +1,165 @@
-;;; huffman-codes.lisp
-;;; Autori: [Inserisci qui i nomi dei membri del gruppo]
-;;; Descrizione: Implementazione di codifica/decodifica Huffman
+;;;; huffman-codes.lisp - Implementation of Huffman encoding/decoding library
 
-;;;; DEFINIZIONE DELLA STRUTTURA DELL'ALBERO
-(defstruct huff-node
-  symbol   ;; per foglie: il simbolo, per nodi interni: lista dei simboli uniti
-  weight   ;; peso (frequenza)
-  left     ;; sottoalbero sinistro
-  right)   ;; sottoalbero destro
 
-;;;; PREDICATI DI SUPPORTO
+;; Define the structure for a node in the Huffman tree
+(defstruct node
+  (symbol nil)     ; Symbol (only for leaf nodes)
+  (weight 0)       ; Weight of the node
+  (left nil)       ; Left child
+  (right nil)      ; Right child
+  (leaf-p nil))    ; Flag to identify leaf nodes
+
+;; Constructor for leaf nodes
+(defun make-leaf (symbol weight)
+  (make-node :symbol symbol :weight weight :leaf-p t))
+
+;; Function to check if a node is a leaf
 (defun leaf-p (node)
-  "Verifica se NODE è una foglia (non ha figli)."
-  (and (null (huff-node-left node))
-       (null (huff-node-right node))))
+  (node-leaf-p node))
 
+;; Function to get the symbol of a leaf node
 (defun leaf-symbol (node)
-  "Restituisce il simbolo memorizzato in una foglia."
-  (huff-node-symbol node))
+  (node-symbol node))
 
+;; Function to get the symbols in a node (all symbols in the subtree)
+(defun node-symbols (node)
+  (if (leaf-p node)
+      (list (leaf-symbol node))
+      (append (node-symbols (node-left node))
+              (node-symbols (node-right node)))))
+
+;; Choose the appropriate branch based on the bit
 (defun choose-branch (bit branch)
-  "Data un'informazione BIT (0 o 1) e un nodo BRANCH, seleziona il ramo corrispondente."
-  (cond ((= bit 0) (huff-node-left branch))
-        ((= bit 1) (huff-node-right branch))
+  (cond ((= 0 bit) (node-left branch))
+        ((= 1 bit) (node-right branch))
         (t (error "Bad bit ~D." bit))))
 
-;;;; FUNZIONE DI DECODIFICA
+;;; Core functions
+
+;; Huffman decoding implementation
 (defun hucodec-decode (bits huffman-tree)
-  "Decodifica una lista di BIT usando l'albero di Huffman HUFFMAN-TREE."
   (labels ((decode-1 (bits current-branch)
              (if (null bits)
                  nil
-                 (let ((next-branch (choose-branch (first bits) current-branch)))
+                 (let ((next-branch (choose-branch (first bits)
+                                                 current-branch)))
                    (if (leaf-p next-branch)
                        (cons (leaf-symbol next-branch)
                              (decode-1 (rest bits) huffman-tree))
                        (decode-1 (rest bits) next-branch))))))
-    (decode-1 bits huffman-tree)))
+    (if (null bits)
+        nil
+        (decode-1 bits huffman-tree))))
 
-;;;; COSTRUZIONE DELL'ALBERO DI HUFFMAN
-(defun hucodec-generate-huffman-tree (symbols-n-weights)
-  "Data una lista di coppie (simbolo . peso), genera l'albero di Huffman."
-  (let ((nodes (mapcar (lambda (sw)
-                         (make-huff-node :symbol (car sw)
-                                         :weight (cdr sw)
-                                         :left nil :right nil))
-                       symbols-n-weights)))
-    (labels ((combine (node1 node2)
-               (make-huff-node :symbol (list (huff-node-symbol node1)
-                                              (huff-node-symbol node2))
-                               :weight (+ (huff-node-weight node1)
-                                          (huff-node-weight node2))
-                               :left node1 :right node2)))
-      (loop while (> (length nodes) 1) do
-           (setf nodes (sort nodes #'< :key #'huff-node-weight))
-           (let* ((node1 (first nodes))
-                  (node2 (second nodes))
-                  (new-node (combine node1 node2)))
-             (setf nodes (cons new-node (nthcdr 2 nodes)))))
-      (first nodes))))
+;; Helper function to find a symbol in the symbol-bits table
+(defun find-symbol-bits (symbol symbol-bits-table)
+  (cdr (assoc symbol symbol-bits-table :test #'equal)))
 
-;;;; GENERAZIONE DELLA TABELLA SIMBOLO -> BIT STRING
-(defun hucodec-generate-symbol-bits-table (huffman-tree)
-  "Data l'albero HUFFMAN-TREE, genera una lista di coppie (simbolo . bits)."
-  (labels ((traverse (node prefix)
-             (if (leaf-p node)
-                 (list (cons (huff-node-symbol node) prefix))
-                 (append (traverse (huff-node-left node) (append prefix '(0)))
-                         (traverse (huff-node-right node) (append prefix '(1)))))))
-    (traverse huffman-tree '())))
-
-;;;; FUNZIONE DI CODIFICA
+;; Huffman encoding implementation
 (defun hucodec-encode (message huffman-tree)
-  "Codifica MESSAGE (lista di simboli) usando HUFFMAN-TREE, restituendo una lista di 0 e 1."
-  (let ((table (hucodec-generate-symbol-bits-table huffman-tree)))
-    (apply #'append
-           (mapcar (lambda (sym)
-                     (let ((entry (assoc sym table)))
-                       (if entry
-                           (cdr entry)
-                           (error "Symbol ~A not found in Huffman tree." sym))))
-                   message))))
+  (let ((symbol-bits-table (hucodec-generate-symbol-bits-table huffman-tree)))
+    (labels ((encode-symbol (symbol)
+               (let ((bits (find-symbol-bits symbol symbol-bits-table)))
+                 (if bits
+                     bits
+                     (error "Symbol ~A not found in the Huffman tree." symbol))))
+             (encode-message (msg)
+               (if (null msg)
+                   nil
+                   (append (encode-symbol (first msg))
+                           (encode-message (rest msg))))))
+      (encode-message message))))
 
-;;;; CODIFICA DI UN FILE
+;; Read a file and encode its contents
 (defun hucodec-encode-file (filename huffman-tree)
-  "Legge il file specificato da FILENAME e restituisce la codifica in bit del suo contenuto."
-  (with-open-file (in filename :direction :input)
-    (let ((contents (read-line in nil)))
-      (unless contents
-        (error "File ~A is empty or could not be read." filename))
-      ;; Per semplicità si assume che il messaggio sia una lista di caratteri (convertendo la stringa in lista)
-      (let ((message (coerce (string-upcase contents) 'list)))
-        (hucodec-encode message huffman-tree)))))
+  (with-open-file (stream filename :direction :input)
+    (if (null stream)
+        (error "Could not open file ~A." filename)
+        (let ((content (read-file-content stream)))
+          (hucodec-encode content huffman-tree)))))
 
-;;;; STAMPA DELL'ALBERO (DEBUGGING)
+;; Helper function to read file content
+(defun read-file-content (stream)
+  (labels ((read-chars (acc)
+             (let ((char (read-char stream nil nil)))
+               (if char
+                   (read-chars (cons char acc))
+                   (reverse acc)))))
+    (read-chars nil)))
+
+;; Generate a Huffman tree from a list of symbols and weights
+(defun hucodec-generate-huffman-tree (symbols-n-weights)
+  (if (null symbols-n-weights)
+      (error "Empty symbols-n-weights list.")
+      (labels ((make-initial-leaves (pairs)
+                 (if (null pairs)
+                     nil
+                     (cons (make-leaf (car (first pairs)) (cdr (first pairs)))
+                           (make-initial-leaves (rest pairs)))))
+               
+               (sort-by-weight (nodes)
+                 (sort nodes #'< :key #'node-weight))
+               
+               (build-tree (leaves)
+                 (if (= 1 (length leaves))
+                     (first leaves)
+                     (let* ((sorted-leaves (sort-by-weight leaves))
+                            (least1 (first sorted-leaves))
+                            (least2 (second sorted-leaves))
+                            (rest-leaves (cddr sorted-leaves))
+                            (combined (make-node 
+                                      :weight (+ (node-weight least1) (node-weight least2))
+                                      :left least1
+                                      :right least2)))
+                       (build-tree (cons combined rest-leaves))))))
+        
+        (build-tree (make-initial-leaves symbols-n-weights)))))
+
+;; Generate a table mapping symbols to their bit sequences
+(defun hucodec-generate-symbol-bits-table (huffman-tree)
+  (labels ((build-table (node bits acc)
+             (if (leaf-p node)
+                 (cons (cons (leaf-symbol node) bits) acc)
+                 (let ((left-acc (build-table (node-left node) (append bits (list 0)) acc))
+                       (right-acc (build-table (node-right node) (append bits (list 1)) nil)))
+                   (append left-acc right-acc)))))
+    (build-table huffman-tree nil nil)))
+
+
+
+;; Print the Huffman tree for debugging
 (defun hucodec-print-huffman-tree (huffman-tree &optional (indent-level 0))
-  "Stampa l'albero di Huffman con un'indentazione per visualizzare la struttura."
-  (let ((indent (make-string indent-level :initial-element #\Space)))
-    (if (leaf-p huffman-tree)
-        (format t "~aLeaf: ~a (weight: ~a)~%" indent (huff-node-symbol huffman-tree) (huff-node-weight huffman-tree))
-        (progn
-          (format t "~aNode: (weight: ~a)~%" indent (huff-node-weight huffman-tree))
-          (format t "~aLeft:~%" indent)
-          (hucodec-print-huffman-tree (huff-node-left huffman-tree) (+ indent-level 2))
-          (format t "~aRight:~%" indent)
-          (hucodec-print-huffman-tree (huff-node-right huffman-tree) (+ indent-level 2))))))
+  (labels ((print-indented (str level)
+             (dotimes (i (* level 2))
+               (format t " "))
+             (format t "~A~%" str)))
+    
+    (if (null huffman-tree)
+        (print-indented "NIL" indent-level)
+        (if (leaf-p huffman-tree)
+            (print-indented (format nil "Leaf: ~A (Weight: ~A)" 
+                                   (leaf-symbol huffman-tree) 
+                                   (node-weight huffman-tree))
+                           indent-level)
+            (progn
+              (print-indented (format nil "Node (Weight: ~A, Symbols: ~A)" 
+                                    (node-weight huffman-tree) 
+                                    (node-symbols huffman-tree))
+                             indent-level)
+              (print-indented "Left:" (1+ indent-level))
+              (hucodec-print-huffman-tree (node-left huffman-tree) (+ indent-level 2))
+              (print-indented "Right:" (1+ indent-level))
+              (hucodec-print-huffman-tree (node-right huffman-tree) (+ indent-level 2)))))
+    nil))
 
-;;;; ESEMPIO DI UTILIZZO
-;; (defparameter *symbols-n-weights* '((A . 8) (B . 3) (C . 1) (D . 1)
-;;                                      (E . 1) (F . 1) (G . 1) (H . 1)))
-;; (defparameter *huffman-tree* (hucodec-generate-huffman-tree *symbols-n-weights*))
-;; (defparameter *message* '(B A C))
-;; (hucodec-print-huffman-tree *huffman-tree*)
-;; (defparameter *encoded* (hucodec-encode *message* *huffman-tree*))
-;; (format t "Encoded message: ~a~%" *encoded*)
-;; (format t "Decoded message: ~a~%" (hucodec-decode *encoded* *huffman-tree*))
+;;; Example usage:
+#|
+(defparameter *sample-weights* '((#\A . 8) (#\B . 3) (#\C . 1) (#\D . 1) (#\E . 1) (#\F . 1) (#\G . 1) (#\H . 1)))
+(defparameter *ht* (hucodec-generate-huffman-tree *sample-weights*))
+(defparameter *message* '(#\B #\A #\C))
+(defparameter *encoded* (hucodec-encode *message* *ht*))
+(defparameter *decoded* (hucodec-decode *encoded* *ht*))
+(equal *message* *decoded*)  ; Should return T
+(hucodec-print-huffman-tree *ht*)  ; Print the tree for visualization
+|#
+
