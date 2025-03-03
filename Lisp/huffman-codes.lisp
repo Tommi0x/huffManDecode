@@ -31,7 +31,9 @@
 ;; Choose the appropriate branch based on the bit
 (defun choose-branch (bit branch)
   (cond ((= 0 bit) (node-left branch))
-        ((= 1 bit) (node-right branch))
+        ((= 1 bit) (if (node-right branch)
+                       (node-right branch)
+                       (error "Invalid bit 1 for a tree with no right branch.")))
         (t (error "Bad bit ~D." bit))))
 
 ;;; Core functions
@@ -87,7 +89,7 @@
                    (reverse acc)))))
     (read-chars nil)))
 
-;; Generate a Huffman tree from a list of symbols and weights
+;; Modified function to generate a Huffman tree from a list of symbols and weights
 (defun hucodec-generate-huffman-tree (symbols-n-weights)
   (if (null symbols-n-weights)
       (error "Empty symbols-n-weights list.")
@@ -102,7 +104,12 @@
                
                (build-tree (leaves)
                  (if (= 1 (length leaves))
-                     (first leaves)
+                     ;; For a single leaf, create a proper tree with left and right branches
+                     (let ((single-leaf (first leaves)))
+                       (make-node 
+                        :weight (node-weight single-leaf)
+                        :left single-leaf
+                        :right (make-leaf 'dummy 0))) ; Dummy right leaf that won't be used
                      (let* ((sorted-leaves (sort-by-weight leaves))
                             (least1 (first sorted-leaves))
                             (least2 (second sorted-leaves))
@@ -113,21 +120,29 @@
                                       :right least2)))
                        (build-tree (cons combined rest-leaves))))))
         
-        (build-tree (make-initial-leaves symbols-n-weights)))))
+        (let ((leaves (make-initial-leaves symbols-n-weights)))
+          ;; Special case: if only one symbol, create a proper tree structure
+          (if (= 1 (length leaves))
+              (let ((single-leaf (first leaves)))
+                (make-node 
+                 :weight (node-weight single-leaf)
+                 :left single-leaf 
+                 :right nil)) ; This way, choosing branch 0 will lead to the symbol
+              (build-tree leaves))))))
 
-;; Generate a table mapping symbols to their bit sequences
+;; Modified function to generate a table mapping symbols to their bit sequences
 (defun hucodec-generate-symbol-bits-table (huffman-tree)
   (labels ((build-table (node bits acc)
              (if (leaf-p node)
                  (cons (cons (leaf-symbol node) bits) acc)
                  (let ((left-acc (build-table (node-left node) (append bits (list 0)) acc))
-                       (right-acc (build-table (node-right node) (append bits (list 1)) nil)))
-                   (append left-acc right-acc)))))
+                       (right-bits (when (node-right node) ; Only build right branch if it exists
+                                     (build-table (node-right node) (append bits (list 1)) nil))))
+                   (append left-acc right-bits)))))
     (build-table huffman-tree nil nil)))
 
 
-
-;; Print the Huffman tree for debugging
+;; Modified print function to handle NIL branches
 (defun hucodec-print-huffman-tree (huffman-tree &optional (indent-level 0))
   (labels ((print-indented (str level)
              (dotimes (i (* level 2))
@@ -142,14 +157,15 @@
                                    (node-weight huffman-tree))
                            indent-level)
             (progn
-              (print-indented (format nil "Node (Weight: ~A, Symbols: ~A)" 
-                                    (node-weight huffman-tree) 
-                                    (node-symbols huffman-tree))
+              (print-indented (format nil "Node (Weight: ~A)" 
+                                    (node-weight huffman-tree))
                              indent-level)
               (print-indented "Left:" (1+ indent-level))
               (hucodec-print-huffman-tree (node-left huffman-tree) (+ indent-level 2))
               (print-indented "Right:" (1+ indent-level))
-              (hucodec-print-huffman-tree (node-right huffman-tree) (+ indent-level 2)))))
+              (if (node-right huffman-tree)
+                  (hucodec-print-huffman-tree (node-right huffman-tree) (+ indent-level 2))
+                  (print-indented "NIL" (+ indent-level 2))))))
     nil))
 
 ;;; Example usage:
