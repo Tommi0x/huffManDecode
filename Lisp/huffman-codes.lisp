@@ -35,8 +35,8 @@
   (cond ((= 0 bit) (node-left branch))
         ((= 1 bit) (if (node-right branch)
                        (node-right branch)
-                       (error "Bit 1 invalido, albero senza rami destri.")))
-        (t (error "Bit errato: ~D." bit))))
+                       (error "Bit 1 non valido: albero non ha rami destri.")))
+        (t (error "bit invalido: ~D." bit))))
 
 ;;; FUNZIONI PRINCIPALI
 
@@ -51,9 +51,15 @@
                        (cons (leaf-symbol next-branch)
                              (decode-1 (rest bits) huffman-tree))
                        (decode-1 (rest bits) next-branch))))))
-    (if (null bits)
-        nil
-        (decode-1 bits huffman-tree))))
+    (cond 
+      ;; Caso no bit
+      ((null bits) nil)
+      ;; Caso singolo
+      ((and (leaf-p (node-left huffman-tree)) (null (node-right huffman-tree)))
+       (make-list (length bits) 
+       :initial-element (leaf-symbol (node-left huffman-tree))))
+      ;; Caso normale
+      (t (decode-1 bits huffman-tree)))))
 
 ;; trova un simbolo nella simbolo nella symbol bits table
 (defun find-symbol-bits (symbol symbol-bits-table)
@@ -66,7 +72,7 @@
                (let ((bits (find-symbol-bits symbol symbol-bits-table)))
                  (if bits
                      bits
-                     (error "Simbolo ~A non trovato nell albero" symbol))))
+                     (error "Simbolo ~A non presente" symbol))))
              (encode-message (msg)
                (if (null msg)
                    nil
@@ -101,29 +107,23 @@
                      (cons (make-leaf (car (first pairs)) (cdr (first pairs)))
                            (make-initial-leaves (rest pairs)))))
                
-    (sort-by-weight (nodes)
-      (sort nodes #'< :key #'node-weight))
+               (sort-by-weight (nodes)
+                 (sort nodes #'< :key #'node-weight))
                
-    (build-tree (leaves)
-      (if (= 1 (length leaves))
-          ;; Caso foglia singola
-          (let ((single-leaf (first leaves)))
-            (make-node 
-            :weight (node-weight single-leaf)
-            :left single-leaf
-            :right (make-leaf 'dummy 0))) ; foglia per riempire
-          (let* ((sorted-leaves (sort-by-weight leaves))
-                (least1 (first sorted-leaves))
-                (least2 (second sorted-leaves))
-                (rest-leaves (cddr sorted-leaves))
-                (combined (make-node 
+               (build-tree (leaves)
+                 (if (= 1 (length leaves))
+                     (first leaves)  
+                     (let* ((sorted-leaves (sort-by-weight leaves))
+                            (least1 (first sorted-leaves))
+                            (least2 (second sorted-leaves))
+                            (rest-leaves (cddr sorted-leaves))
+                            (combined (make-node 
                           :weight (+ (node-weight least1) (node-weight least2))
                           :left least1
                           :right least2)))
-            (build-tree (cons combined rest-leaves))))))
+                       (build-tree (cons combined rest-leaves))))))
 
         (let ((leaves (make-initial-leaves symbols-n-weights)))
-          ;; caso un solo simbolo
           (if (= 1 (length leaves))
               (let ((single-leaf (first leaves)))
                 (make-node 
@@ -135,12 +135,21 @@
 ;; hucodec-generate-symbol-bits-table
 (defun hucodec-generate-symbol-bits-table (huffman-tree)
   (labels ((build-table (node bits acc)
-    (if (leaf-p node)
-      (cons (cons (leaf-symbol node) bits) acc)
-      (let ((left-acc (build-table (node-left node) (append bits (list 0)) acc))
-            (right-bits (when (node-right node) 
-              (build-table (node-right node) (append bits (list 1)) nil))))
-                (append left-acc right-bits)))))
+             (cond 
+
+               ((leaf-p node) 
+                (cons (cons (leaf-symbol node) bits) acc))
+               
+               ((and (leaf-p (node-left node)) (null (node-right node)))
+                (cons (cons (leaf-symbol (node-left node)) (list 0)) acc))
+               
+               (t 
+                (let ((left-acc (build-table (node-left node)
+                 (append bits (list 0)) acc))
+                      (right-bits (when (node-right node) 
+                        (build-table (node-right node) 
+                        (append bits (list 1)) nil))))
+                  (append left-acc right-bits))))))
     (build-table huffman-tree nil nil)))
 
 
